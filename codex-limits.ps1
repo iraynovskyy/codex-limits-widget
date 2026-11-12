@@ -7,6 +7,7 @@
 )
 
 
+
 $ErrorActionPreference = 'Stop'
 $refreshSeconds = 30
 if (-not $CodexPath) {
