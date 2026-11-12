@@ -2,8 +2,11 @@
 
 Orbit is an always-on-top Windows widget for Codex. See how much of your 5-hour and weekly limits you’ve used, when they reset, and how much context remains in your three most recent local Codex chats.
 
+| Full widget | Context warning | Edge tab |
+| :---: | :---: | :---: |
+| <img src="codex-limits-orbit-v2.png" width="195" alt="Full widget with usage rings and recent chats"> | <img src="codex-limits-orbit-v2-context-warning.png" width="195" alt="Peach warning on the collapsed Context button"> | <img src="codex-limits-orbit-v2-edge-tab.png" width="40" alt="Right edge tab with two mini usage rings"> |
 
-![Orbit showing both usage rings and the three most recent Codex chats](codex-limits-orbit-v2.png)
+*Previews use sample data.*
 
 ## Getting started
 
@@ -18,11 +21,7 @@ Orbit is an always-on-top Windows widget for Codex. See how much of your 5-hour 
 - **Edge tab.** Click **›** next to **×** to tuck the widget into the right edge of the current monitor. The upper mini ring shows the 5-hour limit and the lower ring shows the weekly limit. Drag the tab vertically to reposition it; click it to restore the widget at that height.
 - **Refresh.** Orbit checks about every 30 seconds. **LIVE** means the latest limits check succeeded; **Checked** shows the time of the last successful chat check. Opening **Context** requests a fresh check.
 
-| Low-context warning | Edge tab |
-| --- | :---: |
-| ![Collapsed Context button highlighted in peach](codex-limits-orbit-v2-context-warning.png) | ![Compact right-edge tab with two usage rings](codex-limits-orbit-v2-edge-tab.png) |
-
-The screenshots show sample data. On another PC, Orbit uses that PC’s Codex sign-in and local chat history.
+On another PC, Orbit uses that PC’s Codex sign-in and local chat history.
 
 If Orbit stays **OFFLINE**, check your Codex sign-in. To test the connection, run this from the widget folder:
 
