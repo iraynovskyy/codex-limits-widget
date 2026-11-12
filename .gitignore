@@ -1,0 +1,16 @@
+# Local editor settings
+.idea/
+.vscode/
+
+# Credentials and local configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Generated files
+*.log
+*.tmp
+Thumbs.db
+Desktop.ini
