@@ -2,9 +2,11 @@
 
 Orbit is an always-on-top Windows widget for Codex. See how much of your 5-hour and weekly limits you’ve used, when they reset, and how much context remains in your three most recent local Codex chats.
 
-| Full widget | Context warning | Edge tab |
-| :---: | :---: | :---: |
-| <img src="codex-limits-orbit-v2.png" width="195" alt="Full widget with usage rings and recent chats"> | <img src="codex-limits-orbit-v2-context-warning.png" width="195" alt="Peach warning on the collapsed Context button"> | <img src="codex-limits-orbit-v2-edge-tab.png" width="40" alt="Right edge tab with two mini usage rings"> |
+<p align="center">
+  <a href="codex-limits-orbit-v2.png"><img src="codex-limits-orbit-v2.png" width="244" alt="Full widget with usage rings and recent chats"></a>
+  <a href="codex-limits-orbit-v2-context-warning.png"><img src="codex-limits-orbit-v2-context-warning.png" width="244" alt="Peach warning on the collapsed Context button"></a>
+  <a href="codex-limits-orbit-v2-edge-tab.png"><img src="codex-limits-orbit-v2-edge-tab.png" width="50" alt="Right edge tab with two mini usage rings"></a>
+</p>
 
 *Previews use sample data.*
 
