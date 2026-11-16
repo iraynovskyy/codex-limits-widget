@@ -19,8 +19,8 @@ Orbit is an always-on-top Windows widget for Codex. See how much of your 5-hour 
 ## Using Orbit
 
 - **Usage.** The two rings show usage and reset times. A ring turns amber at 90% used.
-- **Context.** Open the panel to see the three most recently active local Codex chats across projects. A percentage turns peach below 15% remaining. When the panel is closed, the **Context** button picks up the same color if any of the three chats crosses that threshold. Personal ChatGPT conversations are outside this local history.
-- **Edge tab.** Click **›** next to **×** to tuck the widget into the right edge of the current monitor. The upper mini ring shows the 5-hour limit and the lower ring shows the weekly limit. Drag the tab vertically to reposition it; click it to restore the widget at that height.
+- **Context.** Open the panel to see the three most recently active local Codex chats across projects. A percentage turns peach below 20% remaining. When the panel is closed, the **Context** button picks up the same color if any of the three chats crosses that threshold. Personal ChatGPT conversations are outside this local history.
+- **Edge tab.** Click **›** next to **×** to tuck the widget into the right edge of the current monitor. The upper mini ring shows the 5-hour limit and the lower ring shows the weekly limit. A peach number counts all unarchived local Codex chats with a known context reading below 20% remaining, including chats outside the three shown in the panel. Drag the tab vertically to reposition it; click it to restore the widget at that height.
 - **Refresh.** Orbit checks about every 30 seconds. **LIVE** means the latest limits check succeeded; **Checked** shows the time of the last successful chat check. Opening **Context** requests a fresh check.
 
 On another PC, Orbit uses that PC’s Codex sign-in and local chat history.
