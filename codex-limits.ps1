@@ -10,6 +10,8 @@
 
 $ErrorActionPreference = 'Stop'
 $refreshSeconds = 30
+$lowContextThreshold = 20
+$contextCache = @{}
 if (-not $CodexPath) {
     $codexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $env:USERPROFILE '.codex' }
     $bundledCodex = Join-Path $codexHome 'plugins\.plugin-appserver\codex.exe'
@@ -71,18 +73,28 @@ function Request-Context {
     if (-not $script:serverReady -or $script:contextDeadline) { return }
     $now = [DateTime]::UtcNow
     $script:nextContextRefresh = $now.AddSeconds($refreshSeconds)
-    $script:contextDeadline = $now.AddSeconds(20)
+    $script:contextRows = [Collections.Generic.List[object]]::new()
+    $script:contextSeen = [Collections.Generic.HashSet[string]]::new()
+    $script:pendingLowCount = 0
+    Request-ContextPage
+}
+
+function Request-ContextPage([string]$cursor) {
+    $script:contextDeadline = [DateTime]::UtcNow.AddSeconds(20)
+    $params = @{
+        sortKey = 'recency_at'
+        limit = 25
+        archived = $false
+        modelProviders = @()
+        # Keep the activity timestamps recorded by Codex Desktop.
+        useStateDbOnly = $true
+    }
+    if ($cursor) { $params.cursor = $cursor }
     $script:contextRequestId = ++$script:nextContextRequestId
     Send-CodexMessage @{
         id = $script:contextRequestId
         method = 'thread/list'
-        params = @{
-            sortKey = 'recency_at'
-            limit = 3
-            modelProviders = @()
-            # Keep the activity timestamps recorded by Codex Desktop.
-            useStateDbOnly = $true
-        }
+        params = $params
     }
 }
 
@@ -113,14 +125,39 @@ function Get-ContextRemaining([string]$path) {
     $used = $latest.last_token_usage.total_tokens
     if ($null -eq $used -or $window -le $baseline) { return }
     $remaining = 100 * ($window - [Math]::Max($baseline, $used)) / ($window - $baseline)
-    return [int][Math]::Round([Math]::Max(0, $remaining), [MidpointRounding]::AwayFromZero)
+    return [int][Math]::Floor([Math]::Max(0.0, $remaining))
+}
+
+function Get-CachedContextRemaining([string]$path) {
+    if (-not $path) { return }
+    $file = Get-Item -LiteralPath $path -ErrorAction SilentlyContinue
+    if (-not $file -or $file.PSIsContainer) { return }
+    $cached = $contextCache[$path]
+    if ($cached -and $cached.Length -eq $file.Length -and $cached.Modified -eq $file.LastWriteTimeUtc) {
+        return $cached.Remaining
+    }
+    $remaining = Get-ContextRemaining $path
+    if ($null -ne $remaining) {
+        $contextCache[$path] = @{ Length = $file.Length; Modified = $file.LastWriteTimeUtc; Remaining = $remaining }
+    }
+    return $remaining
+}
+
+function Update-EdgeWarning([int]$count) {
+    $edgeWarningCount.Text = [string]$count
+    $edgeWarning.Visibility = if ($count -gt 0) { 'Visible' } else { 'Collapsed' }
+    $edgeChevron.Margin = if ($count -gt 0) { '0,0,11,0' } else { '0' }
+    $edgeTab.ToolTip = if ($count -gt 0) {
+        'Restore Orbit. Chats below {0}% context: {1}' -f $lowContextThreshold, $count
+    } else { 'Restore Orbit' }
+    [Windows.Automation.AutomationProperties]::SetName($edgeTab, [string]$edgeTab.ToolTip)
 }
 
 function Update-ContextWarning {
     $lowContext = $contextList.ItemsSource | Where-Object IsLow | Select-Object -First 1
     if ($contextPanel.Visibility -eq 'Collapsed' -and $lowContext) {
         $contextButton.Foreground = $brushes.ConvertFromString('#FFAD8C')
-        $contextButton.ToolTip = 'A recent chat has less than 15% context left'
+        $contextButton.ToolTip = 'A recent chat has less than {0}% context left' -f $lowContextThreshold
     } else {
         $contextButton.ClearValue([Windows.Controls.Control]::ForegroundProperty)
         $contextButton.ClearValue([Windows.FrameworkElement]::ToolTipProperty)
@@ -133,18 +170,23 @@ function Show-Context($message) {
         $contextStatus.Text = 'Context unavailable'
         return
     }
-    $contextList.ItemsSource = @(
-        foreach ($thread in $message.result.data) {
-            $remaining = Get-ContextRemaining $thread.path
+    foreach ($thread in $message.result.data) {
+        if (-not $script:contextSeen.Add($thread.id)) { continue }
+        $remaining = Get-CachedContextRemaining $thread.path
+        $isLow = $null -ne $remaining -and $remaining -lt $lowContextThreshold
+        if ($isLow) { $script:pendingLowCount++ }
+        if ($script:contextRows.Count -lt 3) {
             $title = if ($thread.name) { $thread.name } else { 'Untitled chat' }
             $label = if ($null -eq $remaining) { 'Waiting for data' } else { '{0}% left' -f $remaining }
-            [pscustomobject]@{
-                Title = $title
-                Remaining = $label
-                IsLow = ($null -ne $remaining -and $remaining -lt 15)
-            }
+            $script:contextRows.Add([pscustomobject]@{ Title = $title; Remaining = $label; IsLow = $isLow })
         }
-    )
+    }
+    if ($message.result.nextCursor) {
+        Request-ContextPage $message.result.nextCursor
+        return
+    }
+    $contextList.ItemsSource = $script:contextRows.ToArray()
+    Update-EdgeWarning $script:pendingLowCount
     $contextStatus.Text = if ($contextList.Items.Count) { 'Checked {0:HH:mm:ss}' -f (Get-Date) }
                           else { 'No recent local Codex chats' }
     Update-ContextWarning
@@ -369,9 +411,17 @@ $form = [Windows.Markup.XamlReader]::Parse(@'
     <Button Name="EdgeTab" Visibility="Collapsed" Height="82" ToolTip="Restore Orbit"
             AutomationProperties.Name="Restore Orbit from the right edge">
         <StackPanel>
-            <Path Data="M 7,0 L 3,4 L 7,8" Stroke="#B9DCFF" StrokeThickness="1.3"
-                  StrokeStartLineCap="Round" StrokeEndLineCap="Round"
-                  HorizontalAlignment="Center" Margin="0,0,0,4"/>
+            <Grid Width="36" Height="12" Margin="0,0,0,3">
+                <Path Name="EdgeChevron" Data="M 7,0 L 3,4 L 7,8" Stroke="#B9DCFF" StrokeThickness="1.3"
+                      StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                      HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                <Border Name="EdgeWarning" Visibility="Collapsed" HorizontalAlignment="Right" VerticalAlignment="Center"
+                        Background="#543B39" CornerRadius="5" MinWidth="9" Padding="2,0" IsHitTestVisible="False">
+                    <Viewbox MaxWidth="18" StretchDirection="DownOnly">
+                        <TextBlock Name="EdgeWarningCount" Foreground="#FFAD8C" FontSize="7" FontWeight="SemiBold" TextAlignment="Center"/>
+                    </Viewbox>
+                </Border>
+            </Grid>
             <ContentControl Content="{Binding Content, ElementName=PrimaryDial}"
                             Visibility="{Binding Visibility, ElementName=PrimaryDial}"
                             ContentTemplate="{StaticResource EdgeDial}"/>
@@ -411,6 +461,9 @@ $contextStatus = $form.FindName('ContextStatus')
 $fullWidget = $form.FindName('FullWidget')
 $tuckButton = $form.FindName('TuckButton')
 $edgeTab = $form.FindName('EdgeTab')
+$edgeChevron = $form.FindName('EdgeChevron')
+$edgeWarning = $form.FindName('EdgeWarning')
+$edgeWarningCount = $form.FindName('EdgeWarningCount')
 $fullWidth = $form.Width
 $edgeWidth = 40
 $brushes = New-Object Windows.Media.BrushConverter
@@ -563,6 +616,7 @@ if ($PreviewPath) {
     }
     Update-ContextWarning
     if ($PreviewEdge) {
+        Update-EdgeWarning 1
         $fullWidget.Visibility = 'Collapsed'
         $edgeTab.Visibility = 'Visible'
     }
