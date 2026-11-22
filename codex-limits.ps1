@@ -156,7 +156,7 @@ function Update-EdgeWarning([int]$count) {
 }
 
 function Show-ContextRows {
-    $contextList.ItemsSource = if ($script:showLowContext) { @($script:lowChats) } else { @($script:recentChats) }
+    $contextList.ItemsSource = @(if ($script:showLowContext) { $script:lowChats } else { $script:recentChats })
     $contextHeading.Text = if ($script:showLowContext) { 'Low context' } else { 'Recent chats' }
     $recentButton.Visibility = if ($script:showLowContext) { 'Visible' } else { 'Collapsed' }
     $emptyContext.Visibility = if ($script:showLowContext -and -not $script:lowChats.Count) { 'Visible' } else { 'Collapsed' }
