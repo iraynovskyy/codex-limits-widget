@@ -8,6 +8,10 @@ Orbit is an always-on-top Windows widget for Codex. See how much of your 5-hour 
   <a href="codex-limits-orbit-v2-edge-tab.png"><img src="codex-limits-orbit-v2-edge-tab.png" width="60" alt="Right edge tab with two mini usage rings"></a>
 </p>
 
+<p align="center">
+  <a href="codex-limits-orbit-v2-low-context.png"><img src="codex-limits-orbit-v2-low-context.png" width="293" alt="All low-context chats, including older chats outside the three most recent"></a>
+</p>
+
 *Previews use sample data.*
 
 ## Getting started
@@ -19,7 +23,7 @@ Orbit is an always-on-top Windows widget for Codex. See how much of your 5-hour 
 ## Using Orbit
 
 - **Usage.** The two rings show usage and reset times. A ring turns amber at 90% used.
-- **Context.** Open the panel to see the three most recently active local Codex chats across projects. A percentage turns peach below 20% remaining. When the panel is closed, the **Context** button picks up the same color if any of the three chats crosses that threshold. Personal ChatGPT conversations are outside this local history.
+- **Context.** Open the panel to see the three most recently active local Codex chats across projects. A percentage turns peach below 20% remaining. When the panel is closed, the **Context** button picks up the same color if any of the three chats crosses that threshold. Click the peach count beside **Context** to see all chats below 20%, including older chats outside the recent three. The list is sorted by context remaining, with the lowest first. Click **‹ Recent** to return. Personal ChatGPT conversations are outside this local history.
 - **Edge tab.** Click **›** next to **×** to tuck the widget into the right edge of the current monitor. The upper mini ring shows the 5-hour limit and the lower ring shows the weekly limit. A peach number counts all unarchived local Codex chats with a known context reading below 20% remaining, including chats outside the three shown in the panel. Drag the tab vertically to reposition it; click it to restore the widget at that height.
 - **Refresh.** Orbit checks about every 30 seconds. **LIVE** means the latest limits check succeeded; **Checked** shows the time of the last successful chat check. Opening **Context** requests a fresh check.
 
