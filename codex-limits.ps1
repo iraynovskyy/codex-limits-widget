@@ -3,7 +3,8 @@
     [switch]$Check,
     [string]$PreviewPath,
     [switch]$PreviewCollapsed,
-    [switch]$PreviewEdge
+    [switch]$PreviewEdge,
+    [switch]$PreviewLowContext
 )
 
 
@@ -76,6 +77,7 @@ function Request-Context {
     $script:contextRows = [Collections.Generic.List[object]]::new()
     $script:contextSeen = [Collections.Generic.HashSet[string]]::new()
     $script:pendingLowCount = 0
+    $script:pendingLowChats = [Collections.Generic.List[object]]::new()
     Request-ContextPage
 }
 
@@ -153,8 +155,17 @@ function Update-EdgeWarning([int]$count) {
     [Windows.Automation.AutomationProperties]::SetName($edgeTab, [string]$edgeTab.ToolTip)
 }
 
+function Show-ContextRows {
+    $contextList.ItemsSource = @(if ($script:showLowContext) { $script:lowChats } else { $script:recentChats })
+    $contextHeading.Text = if ($script:showLowContext) { 'Low context' } else { 'Recent chats' }
+    $recentButton.Visibility = if ($script:showLowContext) { 'Visible' } else { 'Collapsed' }
+    $emptyContext.Visibility = if ($script:showLowContext -and -not $script:lowChats.Count) { 'Visible' } else { 'Collapsed' }
+    $lowContextButton.Background = $brushes.ConvertFromString($(if ($script:showLowContext) { '#543B39' } else { '#302D3E' }))
+    Update-ContextWarning
+}
+
 function Update-ContextWarning {
-    $lowContext = $contextList.ItemsSource | Where-Object IsLow | Select-Object -First 1
+    $lowContext = $script:recentChats | Where-Object IsLow | Select-Object -First 1
     if ($contextPanel.Visibility -eq 'Collapsed' -and $lowContext) {
         $contextButton.Foreground = $brushes.ConvertFromString('#FFAD8C')
         $contextButton.ToolTip = 'A recent chat has less than {0}% context left' -f $lowContextThreshold
@@ -174,20 +185,26 @@ function Show-Context($message) {
         if (-not $script:contextSeen.Add($thread.id)) { continue }
         $remaining = Get-CachedContextRemaining $thread.path
         $isLow = $null -ne $remaining -and $remaining -lt $lowContextThreshold
-        if ($isLow) { $script:pendingLowCount++ }
-        if ($script:contextRows.Count -lt 3) {
-            $title = if ($thread.name) { $thread.name } else { 'Untitled chat' }
-            $label = if ($null -eq $remaining) { 'Waiting for data' } else { '{0}% left' -f $remaining }
-            $script:contextRows.Add([pscustomobject]@{ Title = $title; Remaining = $label; IsLow = $isLow })
+        $title = if ($thread.name) { $thread.name } else { 'Untitled chat' }
+        $label = if ($null -eq $remaining) { 'Waiting for data' } else { '{0}% left' -f $remaining }
+        $row = [pscustomobject]@{ Title = $title; Remaining = $label; RemainingPercent = $remaining; IsLow = $isLow }
+        if ($isLow) {
+            $script:pendingLowCount++
+            $script:pendingLowChats.Add($row)
         }
+        if ($script:contextRows.Count -lt 3) { $script:contextRows.Add($row) }
     }
     if ($message.result.nextCursor) {
         Request-ContextPage $message.result.nextCursor
         return
     }
-    $contextList.ItemsSource = $script:contextRows.ToArray()
+    $script:recentChats = $script:contextRows.ToArray()
+    $script:lowChats = @($script:pendingLowChats | Sort-Object RemainingPercent, Title)
+    $lowContextButton.Content = [string]$script:lowChats.Count
+    $lowContextButton.Visibility = if ($script:lowChats.Count -gt 0 -or $script:showLowContext) { 'Visible' } else { 'Collapsed' }
+    Show-ContextRows
     Update-EdgeWarning $script:pendingLowCount
-    $contextStatus.Text = if ($contextList.Items.Count) { 'Checked {0:HH:mm:ss}' -f (Get-Date) }
+    $contextStatus.Text = if ($script:recentChats.Count) { 'Checked {0:HH:mm:ss}' -f (Get-Date) }
                           else { 'No recent local Codex chats' }
     Update-ContextWarning
 }
@@ -367,6 +384,10 @@ $form = [Windows.Markup.XamlReader]::Parse(@'
             </UniformGrid>
             <Border Grid.Row="2" BorderThickness="0,1,0,0" BorderBrush="#31374C" Padding="14,8">
                 <DockPanel>
+                    <Button Name="LowContextButton" DockPanel.Dock="Right" Style="{StaticResource CloseButton}"
+                            Visibility="Collapsed" MinWidth="20" Height="18" Padding="3,0" Margin="3,0,0,0"
+                            FontSize="10" Foreground="#FFAD8C" Background="#302D3E"
+                            ToolTip="Show all chats below 20% context" AutomationProperties.Name="Show all low-context chats"/>
                     <Button Name="ContextButton" DockPanel.Dock="Right" Style="{StaticResource CloseButton}"
                             Width="65" Height="20" FontSize="11" Content="Context &#9656;"
                             AutomationProperties.Name="Show recent chat context"/>
@@ -379,8 +400,14 @@ $form = [Windows.Markup.XamlReader]::Parse(@'
                     <DockPanel>
                         <TextBlock Name="ContextStatus" DockPanel.Dock="Right" FontSize="11"
                                    Foreground="#B1BAD0" VerticalAlignment="Center"/>
-                        <TextBlock Text="Recent chats" FontWeight="SemiBold"/>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Name="ContextHeading" Text="Recent chats" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                            <Button Name="RecentButton" Visibility="Collapsed" Style="{StaticResource CloseButton}"
+                                    Content="&#8249; Recent" FontSize="10" Padding="4,0" Margin="5,0,0,0"
+                                    Height="18" ToolTip="Return to the three most recent chats"/>
+                        </StackPanel>
                     </DockPanel>
+                    <ScrollViewer MaxHeight="180" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                     <ItemsControl Name="ContextList">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
@@ -404,6 +431,9 @@ $form = [Windows.Markup.XamlReader]::Parse(@'
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
+                    </ScrollViewer>
+                    <TextBlock Name="EmptyContext" Visibility="Collapsed" Text="No chats below 20% context"
+                               Foreground="#B1BAD0" FontSize="11" Margin="0,7,0,0"/>
                 </StackPanel>
             </Border>
         </Grid>
@@ -458,6 +488,13 @@ $contextButton = $form.FindName('ContextButton')
 $contextPanel = $form.FindName('ContextPanel')
 $contextList = $form.FindName('ContextList')
 $contextStatus = $form.FindName('ContextStatus')
+$lowContextButton = $form.FindName('LowContextButton')
+$contextHeading = $form.FindName('ContextHeading')
+$recentButton = $form.FindName('RecentButton')
+$emptyContext = $form.FindName('EmptyContext')
+$script:recentChats = @()
+$script:lowChats = @()
+$script:showLowContext = $false
 $fullWidget = $form.FindName('FullWidget')
 $tuckButton = $form.FindName('TuckButton')
 $edgeTab = $form.FindName('EdgeTab')
@@ -526,11 +563,14 @@ foreach ($row in $rows) {
 $form.FindName('CloseButton').Add_Click({ $form.Close() })
 $form.FindName('Header').Add_MouseLeftButtonDown({ $form.DragMove() })
 function Move-EdgeTab([double]$top) {
-    $form.Top = [Math]::Max($script:edgeAreaTop, [Math]::Min($top, $script:edgeAreaBottom - $edgeTab.Height))
-    $script:restoreTop = [Math]::Max($script:edgeAreaTop, [Math]::Min($form.Top, $script:edgeAreaBottom - $script:expandedHeight))
+    # Anchor both states to the same toggle center, including after an edge drag.
+    $expandedTop = $top - $script:edgeToggleOffset
+    $script:restoreTop = [Math]::Max($script:edgeAreaTop, [Math]::Min($expandedTop, $script:edgeAreaBottom - $script:expandedHeight))
+    $form.Top = $script:restoreTop + $script:edgeToggleOffset
 }
 
 $tuckButton.Add_Click({
+    $toggleCenter = $tuckButton.TranslatePoint([Windows.Point]::new($tuckButton.ActualWidth / 2, $tuckButton.ActualHeight / 2), $form).Y
     $script:expandedLeft = $form.Left
     $handle = [Windows.Interop.WindowInteropHelper]::new($form).Handle
     $area = [Windows.Forms.Screen]::FromHandle($handle).WorkingArea
@@ -549,6 +589,10 @@ $tuckButton.Add_Click({
     $form.Width = $edgeWidth
     $form.Left = $edgeLeft
     $form.Top = $edgeTop
+    $form.UpdateLayout()
+    $edgeCenter = $edgeChevron.TranslatePoint([Windows.Point]::new($edgeChevron.ActualWidth / 2, $edgeChevron.ActualHeight / 2), $form).Y
+    $script:edgeToggleOffset = $toggleCenter - $edgeCenter
+    Move-EdgeTab ($script:restoreTop + $script:edgeToggleOffset)
     $null = $edgeTab.Focus()
 })
 $edgeTab.Add_PreviewMouseLeftButtonDown({
@@ -595,6 +639,18 @@ $contextButton.Add_Click({
     }
 })
 
+$lowContextButton.Add_Click({
+    $script:showLowContext = -not $script:showLowContext
+    $contextPanel.Visibility = 'Visible'
+    $contextButton.Content = 'Context ' + [char]0x25BE
+    Show-ContextRows
+    Request-Context
+})
+$recentButton.Add_Click({
+    $script:showLowContext = $false
+    Show-ContextRows
+})
+
 if ($PreviewPath) {
     Show-Limit $rows[0] @{ windowDurationMins = 300; usedPercent = 42 } '#8CCAFF'
     Show-Limit $rows[1] @{ windowDurationMins = 10080; usedPercent = 76 } '#C3A7FF'
@@ -610,13 +666,22 @@ if ($PreviewPath) {
         [pscustomobject]@{ Title = 'Architecture & System Design'; Remaining = '12% left'; IsLow = $true }
         [pscustomobject]@{ Title = 'Підготовка до співбесіди'; Remaining = '87% left'; IsLow = $false }
     )
+    $script:recentChats = @($contextList.ItemsSource)
+    $script:lowChats = @(
+        [pscustomobject]@{ Title = 'Backend API migration'; Remaining = '8% left'; RemainingPercent = 8; IsLow = $true }
+        [pscustomobject]@{ Title = 'Architecture & System Design'; Remaining = '12% left'; RemainingPercent = 12; IsLow = $true }
+    )
+    $lowContextButton.Content = '2'
+    $lowContextButton.Visibility = 'Visible'
+    $script:showLowContext = [bool]$PreviewLowContext
+    Show-ContextRows
     if ($PreviewCollapsed) {
         $contextPanel.Visibility = 'Collapsed'
         $contextButton.Content = 'Context ' + [char]0x25B8
     }
     Update-ContextWarning
     if ($PreviewEdge) {
-        Update-EdgeWarning 1
+        Update-EdgeWarning 2
         $fullWidget.Visibility = 'Collapsed'
         $edgeTab.Visibility = 'Visible'
     }
