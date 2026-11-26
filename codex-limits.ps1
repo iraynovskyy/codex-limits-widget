@@ -563,11 +563,14 @@ foreach ($row in $rows) {
 $form.FindName('CloseButton').Add_Click({ $form.Close() })
 $form.FindName('Header').Add_MouseLeftButtonDown({ $form.DragMove() })
 function Move-EdgeTab([double]$top) {
-    $form.Top = [Math]::Max($script:edgeAreaTop, [Math]::Min($top, $script:edgeAreaBottom - $edgeTab.Height))
-    $script:restoreTop = [Math]::Max($script:edgeAreaTop, [Math]::Min($form.Top, $script:edgeAreaBottom - $script:expandedHeight))
+    # Anchor both states to the same toggle center, including after an edge drag.
+    $expandedTop = $top - $script:edgeToggleOffset
+    $script:restoreTop = [Math]::Max($script:edgeAreaTop, [Math]::Min($expandedTop, $script:edgeAreaBottom - $script:expandedHeight))
+    $form.Top = $script:restoreTop + $script:edgeToggleOffset
 }
 
 $tuckButton.Add_Click({
+    $toggleCenter = $tuckButton.TranslatePoint([Windows.Point]::new($tuckButton.ActualWidth / 2, $tuckButton.ActualHeight / 2), $form).Y
     $script:expandedLeft = $form.Left
     $handle = [Windows.Interop.WindowInteropHelper]::new($form).Handle
     $area = [Windows.Forms.Screen]::FromHandle($handle).WorkingArea
@@ -586,6 +589,10 @@ $tuckButton.Add_Click({
     $form.Width = $edgeWidth
     $form.Left = $edgeLeft
     $form.Top = $edgeTop
+    $form.UpdateLayout()
+    $edgeCenter = $edgeChevron.TranslatePoint([Windows.Point]::new($edgeChevron.ActualWidth / 2, $edgeChevron.ActualHeight / 2), $form).Y
+    $script:edgeToggleOffset = $toggleCenter - $edgeCenter
+    Move-EdgeTab ($script:restoreTop + $script:edgeToggleOffset)
     $null = $edgeTab.Focus()
 })
 $edgeTab.Add_PreviewMouseLeftButtonDown({
